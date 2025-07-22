@@ -11,15 +11,11 @@ class OneClickModuleServiceProvider extends BaseServiceProvider
         if ($this->app->runningInConsole()) {
             $this->commands([
                 \IslamWalied\OneClickModule\Commands\PublishTraits::class,
-            ]);
-            $this->commands([
                 \IslamWalied\OneClickModule\Commands\PublishHelpers::class,
-            ]);
-            $this->commands([
                 \IslamWalied\OneClickModule\Commands\PublishLogging::class,
-            ]);
-            $this->commands([
                 \IslamWalied\OneClickModule\Commands\PublishMiddlewares::class,
+                \IslamWalied\OneClickModule\Commands\generateModule::class,
+                \IslamWalied\OneClickModule\Commands\DeleteModuleEntity::class,
             ]);
 
         }

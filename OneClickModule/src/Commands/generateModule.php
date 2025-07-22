@@ -38,7 +38,7 @@ class generateModule extends Command
         $servicesImplPath = "{$servicesPath}/Implementation";
         $servicesInterfacePath = "{$servicesPath}/Interface";
         $providersPath = "{$modulePath}/Providers";
-
+        $isFirstInstall = !File::exists(base_path('Modules'));
         if (!File::exists($modulePath)) {
             File::makeDirectory($modulePath, 0755, true);
             File::makeDirectory($configPath, 0755, true);
@@ -63,7 +63,9 @@ class generateModule extends Command
 
             $this->createServiceServiceProvider($providersPath, $module);
             $this->registerProvidersInBootstrap($module);
-
+            if ($isFirstInstall) {
+                $this->updateMainDatabaseSeeder();
+            }
             $this->info("Module {$module} created successfully.");
         }
 
@@ -193,6 +195,41 @@ class generateModule extends Command
             'attributes' => $attributes,
             'translatableAttributes' => $translatableAttributes,
         ];
+    }
+    protected function updateMainDatabaseSeeder()
+    {
+        $seederPath = database_path('seeders/DatabaseSeeder.php');
+        $content = <<<PHP
+<?php
+
+namespace Database\Seeders;
+
+use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\File;
+
+class DatabaseSeeder extends Seeder
+{
+    public function run(): void
+    {
+        \$modules = File::directories(base_path('Modules'));
+
+        foreach (\$modules as \$module) {
+            \$moduleName = basename(\$module);
+            \$seederClass = "Modules\\\\{\$moduleName}\\\\Database\\\\Seeders\\\\DatabaseSeeder";
+
+            if (class_exists(\$seederClass)) {
+                \$this->call(\$seederClass);
+            }
+        }
+    }
+}
+PHP;
+
+        // Only update if the file doesn't exist or doesn't contain the module seeder logic
+        if (!File::exists($seederPath) || !str_contains(File::get($seederPath), 'Modules\\')) {
+            File::put($seederPath, $content);
+            $this->info('Main DatabaseSeeder updated successfully.');
+        }
     }
 
     protected function createConfigFile($path, $module)
