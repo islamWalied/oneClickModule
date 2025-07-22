@@ -17,7 +17,7 @@
     },
     "autoload": {
         "psr-4": {
-            "Islamwalied\\OneClickModule\\": "OneClickModule/src/"
+            "IslamWalied\\OneClickModule\\": "OneClickModule/src/"
         }
     },
     "extra": {

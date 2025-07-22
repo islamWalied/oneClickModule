@@ -1,6 +1,6 @@
 <?php
 
-namespace Islamwalied\OneClickModule\Commands;
+namespace IslamWalied\OneClickModule\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Str;
@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\File;
 class DeleteModuleEntity extends Command
 {
     protected $signature = 'delete:module {module : The name of the module (e.g., Auth)} {entity : The name of the entity to delete (e.g., User)}';
-    protected $description = 'Delete an entity and all its associated files from a module';
+    protected $description = "This Command is for deleting an entity and all its associated files from a module";
 
     public function handle()
     {
@@ -97,7 +97,7 @@ class DeleteModuleEntity extends Command
 
         $content = File::get($seederPath);
 
-        $callPattern = "/\s*\\\$this->call\s*\(\s*\[\s*{$entity}Seeder::class\s*\]\s*\);\s*\n/";
+        $callPattern = "/\s*\\\$this->call\s*\(\s*\[\s*{$entity}Seeder::class\s*]\s*\);\s*\n/";
 
         $updatedContent = preg_replace($callPattern, '', $content);
 

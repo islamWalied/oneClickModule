@@ -1,6 +1,6 @@
 <?php
 
-namespace Islamwalied\OneClickModule\Commands;
+namespace IslamWalied\OneClickModule\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Str;
