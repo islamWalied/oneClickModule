@@ -1092,10 +1092,10 @@ PHP;
 
         $content = File::get($bootstrapPath);
         $providers = [
+            "App\\Providers\\ModuleServiceProvider::class",
             "Modules\\{$module}\\Providers\\{$module}ServiceProvider::class",
             "Modules\\{$module}\\Providers\\RepositoryServiceProvider::class",
             "Modules\\{$module}\\Providers\\ServiceServiceProvider::class",
-            "App\\Providers\\ModuleServiceProvider::class",
         ];
 
         $providerLines = "\n";

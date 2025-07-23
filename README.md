@@ -49,6 +49,28 @@ Add the GD extension to your `composer.json`:
 }
 ```
 
+And Also Add Modules autoload to `composer.json` inside psr-4 append
+```json
+"psr-4": {
+    "Modules\\": "Modules/",
+}
+```
+
+
+#### Important Tip
+`you should run these commands or just the last one
+everytime you make new model in the module`
+```bash
+composer dump-autoload
+php artisan cache:clear
+php artisan config:clear
+php artisan config:cache
+php artisan route:clear
+php artisan route:cache
+php artisan optimize:clear
+php artisan optimize
+```
+
 ### Optional Dependency
 
 For translatable fields, install:
