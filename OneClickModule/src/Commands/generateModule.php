@@ -65,6 +65,7 @@ class generateModule extends Command
             $this->registerProvidersInBootstrap($module);
             if ($isFirstInstall) {
                 $this->updateMainDatabaseSeeder();
+                $this->updateBootstrapApp();
             }
             $this->info("Module {$module} created successfully.");
         }
@@ -229,6 +230,168 @@ PHP;
         if (!File::exists($seederPath) || !str_contains(File::get($seederPath), 'Modules\\')) {
             File::put($seederPath, $content);
             $this->info('Main DatabaseSeeder updated successfully.');
+        }
+    }
+    protected function updateBootstrapApp()
+    {
+        $appPath = base_path('bootstrap/app.php');
+        $content = <<<PHP
+<?php
+
+use Illuminate\Http\Request;
+use Illuminate\Foundation\Application;
+use Illuminate\Foundation\Configuration\Exceptions;
+use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
+use Illuminate\Auth\AuthenticationException;
+use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
+use Symfony\Component\HttpKernel\Exception\MethodNotAllowedHttpException;
+use Symfony\Component\HttpKernel\Exception\HttpException;
+use Illuminate\Database\QueryException;
+use Illuminate\Http\Exceptions\ThrottleRequestsException;
+use Symfony\Component\HttpKernel\Exception\TooManyRequestsHttpException;
+use App\Traits\ResponseTrait;
+
+return Application::configure(basePath: dirname(__DIR__))
+    ->withRouting(
+        web: __DIR__.'/../routes/web.php',
+        api: __DIR__.'/../routes/api.php',
+        commands: __DIR__.'/../routes/console.php',
+        channels: __DIR__.'/../routes/channels.php',
+        health: '/up',
+    )
+    ->withMiddleware(function (Middleware \$middleware) {
+        \$middleware->alias([
+            'lang' => App\Http\Middleware\Lang::class,
+            'cors' => App\Http\Middleware\Cors::class,
+            'throttle' => App\Http\Middleware\ThrottleRequests::class,
+        ]);
+    })
+    ->withExceptions(function (Exceptions \$exceptions) {
+        \$exceptions->render(function (Throwable \$e, Request \$request) {
+            if (!\$request->is('api/*')) {
+                return null; // Let Laravel handle web requests normally
+            }
+
+            \$responseHandler = new class {
+                use ResponseTrait;
+            };
+
+            \$isDebug = config('app.debug', false);
+
+            switch (true) {
+                case \$e instanceof ValidationException:
+                    \$response = \$responseHandler->returnError('Validation failed', 422);
+                    \$responseData = \$response->getData(true);
+                    \$responseData['validation_errors'] = \$e->errors();
+                    return response()->json(\$responseData, 422);
+
+                // Authentication errors
+                case \$e instanceof AuthenticationException:
+                    return \$responseHandler->returnError('Authentication required', 401);
+
+                // Authorization errors
+                case \$e instanceof AuthorizationException:
+                    return \$responseHandler->returnError('Insufficient permissions', 403);
+
+                // Model not found
+                case \$e instanceof ModelNotFoundException:
+                    \$modelName = class_basename(\$e->getModel());
+                    return \$responseHandler->returnError("{\$modelName} not found", 404);
+
+                // Route not found
+                case \$e instanceof NotFoundHttpException:
+                    return \$responseHandler->returnError('Route not found', 404);
+
+                // Method not allowed
+                case \$e instanceof MethodNotAllowedHttpException:
+                    return \$responseHandler->returnError('Method not allowed', 405);
+
+                // Rate limiting
+                case \$e instanceof ThrottleRequestsException:
+                case \$e instanceof TooManyRequestsHttpException:
+                    \$response = \$responseHandler->returnError('Too many requests', 429);
+                    \$responseData = \$response->getData(true);
+                    \$responseData['retry_after'] = \$e->getHeaders()['Retry-After'] ?? null;
+                    return response()->json(\$responseData, 429);
+
+                // Database errors
+                case \$e instanceof QueryException:
+                    \$message = 'Database operation failed';
+                    return \$responseHandler->returnError(\$message, 500);
+
+                // HTTP exceptions
+                case \$e instanceof HttpException:
+                    \$statusCode = \$e->getStatusCode();
+                    \$message = \$e->getMessage() ?: getHttpStatusMessage(\$statusCode);
+                    return \$responseHandler->returnError(\$message, \$statusCode);
+
+                // Handle the specific login route error
+                case str_contains(\$e->getMessage(), 'Route [login] not defined'):
+                    return \$responseHandler->returnError('Authentication required - login route not configured', 401);
+
+                // Generic exceptions
+                default:
+                    \$statusCode = method_exists(\$e, 'getStatusCode') ? \$e->getStatusCode() : 500;
+                    \$message = \$isDebug ?
+                        \$e->getMessage() :
+                        'An unexpected error occurred';
+
+                    // Log unexpected errors
+                    if (\$statusCode >= 500) {
+                        Log::error('Unexpected error', [
+                            'message' => \$e->getMessage(),
+                            'exception' => get_class(\$e),
+                            'file' => \$e->getFile(),
+                            'line' => \$e->getLine(),
+                            'request_url' => \$request->fullUrl(),
+                            'request_method' => \$request->method(),
+                            'user_id' => \$request->user()?->id,
+                            'ip_address' => \$request->ip()
+                        ]);
+                    }
+
+                    return \$responseHandler->returnError(\$message, \$statusCode);
+            }
+        });
+
+        // Handle authentication exceptions specifically for API
+        \$exceptions->renderable(function (AuthenticationException \$e, Request \$request) {
+            if (\$request->is('api/*')) {
+                \$responseHandler = new class {
+                    use ResponseTrait;
+                };
+                return \$responseHandler->returnError('Authentication required', 401);
+            }
+        });
+    })
+    ->create();
+PHP;
+        // Ensure the bootstrap directory exists
+        $bootstrapDir = dirname($appPath);
+        if (!File::exists($bootstrapDir)) {
+            File::makeDirectory($bootstrapDir, 0755, true);
+            $this->info("Created bootstrap directory at {$bootstrapDir}.");
+        }
+
+        // Check if the file is writable
+        if (File::exists($appPath) && !is_writable($appPath)) {
+            $this->error("The file {$appPath} is not writable. Please check file permissions.");
+            return;
+        }
+
+        // Write the content to the file
+        try {
+            if (File::put($appPath, $content) === false) {
+                $this->error("Failed to write to {$appPath}. Please check file permissions or disk space.");
+            } else {
+                $this->info('bootstrap/app.php updated successfully.');
+            }
+        } catch (\Exception $e) {
+            $this->error("Error updating bootstrap/app.php: {$e->getMessage()}");
         }
     }
 

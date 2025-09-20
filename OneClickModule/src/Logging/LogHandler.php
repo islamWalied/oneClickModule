@@ -5,6 +5,7 @@ namespace App\Logging;
 use Monolog\Logger;
 use Monolog\Handler\StreamHandler;
 use Monolog\Formatter\LineFormatter;
+
 class LogHandler
 {
     public function __invoke(array $config)
@@ -15,7 +16,7 @@ class LogHandler
         $logger = new Logger('custom-daily');
         $format = "[%datetime%] [$callingClass] %level_name%: %message% %context%\n";
         $formatter = new LineFormatter($format, null, true, true);
-        $handler = new StreamHandler($logFilePath, Logger::DEBUG);
+        $handler = new StreamHandler($logFilePath, Logger::DEBUG, true, 0777);
         $handler->setFormatter($formatter);
         $logger->pushHandler($handler);
         return $logger;

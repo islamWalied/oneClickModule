@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Traits\ResponseTrait;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Cache\RateLimiter;
@@ -9,6 +10,8 @@ use Symfony\Component\HttpFoundation\Response;
 
 class ThrottleRequests
 {
+    use ResponseTrait;
+
     protected $limiter;
 
     public function __construct(RateLimiter $limiter)
@@ -21,9 +24,7 @@ class ThrottleRequests
         $key = $request->ip();
 
         if ($this->limiter->tooManyAttempts($key, $maxAttempts)) {
-            return response()->json([
-                'message' => 'Too Many Requests',
-            ], Response::HTTP_TOO_MANY_REQUESTS);
+            return $this->returnError(__("messages.too_many_requests"), Response::HTTP_TOO_MANY_REQUESTS);
         }
 
         $this->limiter->hit($key, $decayMinutes * 60);

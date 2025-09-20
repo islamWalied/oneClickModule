@@ -8,13 +8,14 @@ use Illuminate\Support\Facades\Response;
 
 trait ResponseTrait
 {
-    protected function returnPaginatedData($message, $code, $resource,$data)
+    protected function returnPaginatedData($message, $code, $data, $additionalData = []): JsonResponse
     {
         return Response::json([
             'status' => 'success',
             'code' => $code,
             'message' => $message,
             'data' => $data,
+            'additional_data' => $additionalData,
             'pagination' => [
                 'total' => $data->total(),
                 'per_page' => $data->perPage(),
@@ -23,30 +24,27 @@ trait ResponseTrait
                 'from' => $data->firstItem(),
                 'to' => $data->lastItem(),
             ],
-        ]);
+        ], $code);
     }
 
-
-    public function returnAbort($msg, $code): void
-    {
-        abort($code, $msg);
-    }
-    public function returnError($msg,$code): JsonResponse
+    public function returnError($msg, $code): JsonResponse
     {
         return Response::json([
             'status' => 'error',
             'code' => $code,
             'message' => $msg,
-        ]);
+        ], $code);
     }
-    public function success($msg,$code): JsonResponse
+
+    public function success($msg, $code): JsonResponse
     {
         return Response::json([
             'status' => 'success',
             'code' => $code,
             'message' => $msg,
-        ]);
+        ], $code);
     }
+
     public function returnData($msg, $code, $value): JsonResponse
     {
         return Response::json([
@@ -54,6 +52,14 @@ trait ResponseTrait
             'code' => $code,
             'message' => $msg,
             'data' => $value,
-        ]);
+        ], $code);
+    }
+
+    public function returnErrorFromMethod($error, $data)
+    {
+        return [
+            'error' => $error,
+            'data' => $data
+        ];
     }
 }

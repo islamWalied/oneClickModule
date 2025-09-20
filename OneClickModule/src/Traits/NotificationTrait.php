@@ -2,7 +2,7 @@
 
 namespace App\Traits;
 
-use App\Services\FirebaseService;
+use App\Services\Implementation\FirebaseService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Modules\Auth\Models\User;
@@ -12,11 +12,11 @@ use Modules\Utilities\Models\UserNotification;
 trait NotificationTrait
 {
     public function saveAndSendNotification(
-        array $attributes,
-        array $userIds,
+        array  $attributes,
+        array  $userIds,
         string $title,
         string $body,
-        array $data = []): array
+        array  $data = []): array
     {
         return DB::transaction(function () use ($attributes, $userIds, $title, $body, $data) {
             $result = $this->saveNotification($attributes, $userIds);
@@ -33,12 +33,13 @@ trait NotificationTrait
             ];
         });
     }
+
     public function saveAndSendSingleNotification(
-        array $attributes,
-        int $userId,
+        array  $attributes,
+        int    $userId,
         string $title,
         string $body,
-        array $data = []
+        array  $data = []
     ): array
     {
         return DB::transaction(function () use ($attributes, $userId, $title, $body, $data) {
@@ -61,12 +62,14 @@ trait NotificationTrait
     {
         $userIds = is_array($userIds) ? $userIds : [$userIds];
 
-        $notification = Notification::create([
+        $notificationData = [
             'title' => $attributes['title'],
             'content' => $attributes['content'],
-            'date' => $attributes['date'] ?? now(),
+            'date' =>  now()->toDateString(),
             'additional_data' => $attributes['additional_data'] ?? [],
-        ]);
+        ];
+
+        $notification = Notification::create($notificationData);
 
         $notificationUsers = array_map(function ($userId) use ($notification) {
             return [
@@ -89,6 +92,7 @@ trait NotificationTrait
             'tokens' => count($userIds) === 1 ? ($tokens[0] ?? null) : $tokens,
         ];
     }
+
     protected function prepareFirebaseData(?array $data): ?array
     {
         if (empty($data)) {
