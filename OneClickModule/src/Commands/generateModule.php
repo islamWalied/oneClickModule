@@ -226,7 +226,6 @@ class DatabaseSeeder extends Seeder
 }
 PHP;
 
-        // Only update if the file doesn't exist or doesn't contain the module seeder logic
         if (!File::exists($seederPath) || !str_contains(File::get($seederPath), 'Modules\\')) {
             File::put($seederPath, $content);
             $this->info('Main DatabaseSeeder updated successfully.');
@@ -273,7 +272,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withExceptions(function (Exceptions \$exceptions) {
         \$exceptions->render(function (Throwable \$e, Request \$request) {
             if (!\$request->is('api/*')) {
-                return null; // Let Laravel handle web requests normally
+                return null;
             }
 
             \$responseHandler = new class {
@@ -289,28 +288,22 @@ return Application::configure(basePath: dirname(__DIR__))
                     \$responseData['validation_errors'] = \$e->errors();
                     return response()->json(\$responseData, 422);
 
-                // Authentication errors
                 case \$e instanceof AuthenticationException:
                     return \$responseHandler->returnError('Authentication required', 401);
 
-                // Authorization errors
                 case \$e instanceof AuthorizationException:
                     return \$responseHandler->returnError('Insufficient permissions', 403);
 
-                // Model not found
                 case \$e instanceof ModelNotFoundException:
                     \$modelName = class_basename(\$e->getModel());
                     return \$responseHandler->returnError("{\$modelName} not found", 404);
 
-                // Route not found
                 case \$e instanceof NotFoundHttpException:
                     return \$responseHandler->returnError('Route not found', 404);
 
-                // Method not allowed
                 case \$e instanceof MethodNotAllowedHttpException:
                     return \$responseHandler->returnError('Method not allowed', 405);
 
-                // Rate limiting
                 case \$e instanceof ThrottleRequestsException:
                 case \$e instanceof TooManyRequestsHttpException:
                     \$response = \$responseHandler->returnError('Too many requests', 429);
@@ -318,29 +311,24 @@ return Application::configure(basePath: dirname(__DIR__))
                     \$responseData['retry_after'] = \$e->getHeaders()['Retry-After'] ?? null;
                     return response()->json(\$responseData, 429);
 
-                // Database errors
                 case \$e instanceof QueryException:
                     \$message = 'Database operation failed';
                     return \$responseHandler->returnError(\$message, 500);
 
-                // HTTP exceptions
                 case \$e instanceof HttpException:
                     \$statusCode = \$e->getStatusCode();
                     \$message = \$e->getMessage() ?: getHttpStatusMessage(\$statusCode);
                     return \$responseHandler->returnError(\$message, \$statusCode);
 
-                // Handle the specific login route error
                 case str_contains(\$e->getMessage(), 'Route [login] not defined'):
                     return \$responseHandler->returnError('Authentication required - login route not configured', 401);
 
-                // Generic exceptions
                 default:
                     \$statusCode = method_exists(\$e, 'getStatusCode') ? \$e->getStatusCode() : 500;
                     \$message = \$isDebug ?
                         \$e->getMessage() :
                         'An unexpected error occurred';
 
-                    // Log unexpected errors
                     if (\$statusCode >= 500) {
                         Log::error('Unexpected error', [
                             'message' => \$e->getMessage(),
@@ -358,7 +346,6 @@ return Application::configure(basePath: dirname(__DIR__))
             }
         });
 
-        // Handle authentication exceptions specifically for API
         \$exceptions->renderable(function (AuthenticationException \$e, Request \$request) {
             if (\$request->is('api/*')) {
                 \$responseHandler = new class {
@@ -370,20 +357,17 @@ return Application::configure(basePath: dirname(__DIR__))
     })
     ->create();
 PHP;
-        // Ensure the bootstrap directory exists
         $bootstrapDir = dirname($appPath);
         if (!File::exists($bootstrapDir)) {
             File::makeDirectory($bootstrapDir, 0755, true);
             $this->info("Created bootstrap directory at {$bootstrapDir}.");
         }
 
-        // Check if the file is writable
         if (File::exists($appPath) && !is_writable($appPath)) {
             $this->error("The file {$appPath} is not writable. Please check file permissions.");
             return;
         }
 
-        // Write the content to the file
         try {
             if (File::put($appPath, $content) === false) {
                 $this->error("Failed to write to {$appPath}. Please check file permissions or disk space.");
@@ -526,8 +510,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration
-{
+return new class extends Migration {
     public function up(): void
     {
         Schema::create('{$tableName}', function (Blueprint \$table) {
@@ -644,7 +627,7 @@ PHP;
             case 'text':
             case 'mediumtext':
             case 'longtext':
-                return "'Sample text for {$name}'";
+                return "'test {$name}'";
             case 'date':
                 return "'2025-09-25'";
             case 'timestamp':
@@ -656,7 +639,7 @@ PHP;
             case 'char':
                 return "'" . substr($name, 0, 1) . "'";
             default:
-                return "'sample_{$name}'";
+                return "'test_{$name}'";
         }
     }
 
@@ -704,9 +687,13 @@ namespace Modules\\{$module}\Repositories\Interface;
 interface {$entity}Repository
 {
     public function get(\$query, \$limit);
+    
     public function show(\$model);
+    
     public function store(\$model);
+    
     public function update(\$model);
+    
     public function delete(\$model);
 }
 PHP;
@@ -727,7 +714,8 @@ class {$entity}RepositoriesImpl implements {$entity}Repository
 {
     public function get(\$query, \$limit)
     {
-        return {$entity}::orderBy('created_at','desc')
+        return {$entity}::whereAny([''], 'like', '%' . \$query . '%')
+                ->orderByDesc('created_at')
                 ->paginate(\$limit);
     }
 
@@ -767,9 +755,13 @@ namespace Modules\\{$module}\Services\Interface;
 interface {$entity}Service
 {
     public function index(\$query, \$limit);
+    
     public function show(\${$entityLower});
+    
     public function store(\$request);
+    
     public function update(\$request, \${$entityLower});
+    
     public function delete(\${$entityLower});
 }
 PHP;
@@ -790,10 +782,13 @@ namespace Modules\\{$module}\Services\Interface;
 use Illuminate\Http\JsonResponse;
 use App\Traits\ImageTrait;
 use App\Traits\ResponseTrait;
+use App\Traits\Utils;
+use App\Traits\HasTimezoneConversion;
+use App\Traits\NotificationTrait;
 
 class BaseService
 {
-    use ResponseTrait, ImageTrait;
+    use ResponseTrait, ImageTrait, Utils, NotificationTrait, HasTimezoneConversion;
 }
 PHP;
         File::put("{$path}/BaseService.php", $content);
@@ -817,6 +812,7 @@ namespace Modules\\{$module}\Services\Implementation;
 
 use Modules\\{$module}\Http\Resources\\{$entity}Resource;
 use Illuminate\Support\Facades\Log;
+use Symfony\Component\HttpFoundation\Response;
 use Modules\\{$module}\Repositories\Interface\\{$entity}Repository;
 use Modules\\{$module}\Services\Interface\\{$entity}Service;
 use Modules\\{$module}\Services\Interface\BaseService;
@@ -834,12 +830,22 @@ class {$entity}ServiceImpl extends BaseService implements {$entity}Service
     {
         try {
             Log::info('{$entity} index request', ['limit' => \$limit]);
+            
             \${$entityLower} = \$this->{$entityLower}Repository->get(\$query, \$limit);
+            
             Log::info('{$entity} index successful', ['count' => \${$entityLower}->count()]);
-            return \$this->returnData(__('messages.{$entityLower}.index_success'), 200, {$entity}Resource::collection(\${$entityLower}));
+            
+            return \$this->returnPaginatedData(
+                __('messages.{$entityLower}_index_success'),
+                Response::HTTP_OK,
+                {$entity}Resource::collection(\${$entityLower})
+            );
         } catch (\Exception \$e) {
             Log::error('{$entity} fetch Error: ', ['error' => \$e->getMessage()]);
-            return \$this->returnError(__('messages.{$entityLower}.index_failed'), 500);
+            return \$this->returnError(
+                __('messages.{$entityLower}_index_failed'), 
+                Response::HTTP_INTERNAL_SERVER_ERROR
+            );
         }
     }
 
@@ -847,12 +853,22 @@ class {$entity}ServiceImpl extends BaseService implements {$entity}Service
     {
         try {
             Log::info('{$entity} show request', ['id' => \${$entityLower}->id]);
+            
             \${$entityLower} = \$this->{$entityLower}Repository->show(\${$entityLower}->id);
+            
             Log::info('{$entity} show successful', ['id' => \${$entityLower}->id]);
-            return \$this->returnData(__('messages.{$entityLower}.show_success'), 200, new {$entity}Resource(\${$entityLower}));
+            
+            return \$this->returnData(
+                __('messages.{$entityLower}.show_success'),
+                Response::HTTP_OK,
+                new {$entity}Resource(\${$entityLower})
+            );
         } catch (\Exception \$e) {
             Log::error('{$entity} fetch Error:', ['error' => \$e->getMessage()]);
-            return \$this->returnError(__('messages.{$entityLower}.show_failed'), 500);
+            return \$this->returnError(
+                __('messages.{$entityLower}.show_failed'),
+                 Response::HTTP_INTERNAL_SERVER_ERROR
+            );
         }
     }
 
@@ -860,27 +876,49 @@ class {$entity}ServiceImpl extends BaseService implements {$entity}Service
     {
         try {
             Log::info('{$entity} store request', \$request->all());
+            
             \${$entityLower} = [
 {$dataArray}            ];
+
             \${$entityLower} = \$this->{$entityLower}Repository->store(\${$entityLower});
-            Log::info('{$entity} created successfully');
-            return \$this->returnData(__('messages.{$entityLower}.create_success'), 201, new {$entity}Resource(\${$entityLower}));
+            
+            
+            return \$this->returnData(
+                __('messages.{$entityLower}_create_success'),
+                Response::HTTP_CREATED,
+                new {$entity}Resource(\${$entityLower})
+            );
         } catch (\Exception \$e) {
             Log::error('{$entity} Create Error', ['error' => \$e->getMessage()]);
-            return \$this->returnError(__('messages.{$entityLower}.create_failed'), 500);
+            return \$this->returnError(
+                __('messages.{$entityLower}_create_failed'), 
+                Response::HTTP_INTERNAL_SERVER_ERROR
+            );
         }
     }
 
     public function update(\$request, \${$entityLower})
     {
         try {
-            Log::info('{$entity} update request', ['id' => \${$entityLower}->id, 'data' => \$request->all()]);
-    {$updateAssignments}            \${$entityLower} = \$this->{$entityLower}Repository->update(\${$entityLower});
+            Log::info('{$entity} update request', ['data' => \$request->all()]);
+            
+    {$updateAssignments}            
+            
+            \${$entityLower} = \$this->{$entityLower}Repository->update(\${$entityLower});
+    
             Log::info('{$entity} updated successfully', ['id' => \${$entityLower}->id]);
-            return \$this->returnData(__('messages.{$entityLower}.update_success'), 200, new {$entity}Resource(\${$entityLower}));
+            
+            return \$this->returnData(
+                __('messages.{$entityLower}_update_success'), 
+                Response::HTTP_OK,
+                new {$entity}Resource(\${$entityLower})
+            );
         } catch (\Exception \$e) {
             Log::error('{$entity} Update Error', ['error' => \$e->getMessage()]);
-            return \$this->returnError(__('messages.{$entityLower}.update_failed'), 500);
+            return \$this->returnError(
+                __('messages.{$entityLower}_update_failed'), 
+                Response::HTTP_INTERNAL_SERVER_ERROR
+            );
         }
     }
 
@@ -888,12 +926,19 @@ class {$entity}ServiceImpl extends BaseService implements {$entity}Service
     {
         try {
             Log::info('{$entity} delete request', ['id' => \${$entityLower}->id]);
+            
             \$this->{$entityLower}Repository->delete(\${$entityLower});
-            Log::info('{$entity} deleted successfully', ['id' => \${$entityLower}->id]);
-            return \$this->success(__('messages.{$entityLower}.delete_success'), 204);
+                        
+            return \$this->success(
+                __('messages.{$entityLower}_delete_success'), 
+                Response::HTTP_OK
+            );
         } catch (\Exception \$e) {
             Log::error('{$entity} Delete Error', ['error' => \$e->getMessage()]);
-            return \$this->returnError(__('messages.{$entityLower}.delete_failed'), 500);
+            return \$this->returnError(
+                __('messages.{$entityLower}_delete_failed'), 
+                Response::HTTP_INTERNAL_SERVER_ERROR
+            );
         }
     }
 }
@@ -929,7 +974,7 @@ class {$entity}Controller extends Controller
     {
         return \$this->{$entityLower}Service->index(
             request('query'),
-            request('per_page', 10)
+            request('per_page', 100)
         );
     }
 
@@ -1139,13 +1184,21 @@ use Illuminate\Support\Facades\Route;
 use Modules\\{$module}\Http\Controllers\\{$entity}Controller;
 
 Route::middleware(['cors', 'lang', 'throttle'])->prefix('v1/')->group(function () {
+
     Route::middleware(['auth:sanctum'])->group(function () {
+    
         Route::get('{$entityPlural}', [{$entity}Controller::class, 'index']);
+        
         Route::get('{$entityPlural}/{{$entityLower}}', [{$entity}Controller::class, 'show']);
+        
         Route::post('{$entityPlural}', [{$entity}Controller::class, 'store']);
+        
         Route::patch('{$entityPlural}/{{$entityLower}}', [{$entity}Controller::class, 'update']);
+        
         Route::delete('{$entityPlural}/{{$entityLower}}', [{$entity}Controller::class, 'destroy']);
+        
     });
+    
 });
 PHP;
         File::put("{$path}/{$entityLower}.php", $content);
