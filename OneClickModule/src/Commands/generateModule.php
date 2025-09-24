@@ -8,17 +8,14 @@ use Illuminate\Support\Facades\File;
 
 class generateModule extends Command
 {
-    protected $signature = 'make:module {module : The name of the module (e.g., Utilities)} {entity : The name of the entity (e.g., Country)}';
-    protected $description = 'Create a new module or entity with CRUD operations by interactively entering attributes (type "done" to finish)';
+    protected $signature = 'make:module {module : The name of the module (e.g., Utilities)} {entity : The name of the entity (e.g., Country)} {--no-implement : Generate empty stub files for the entity instead of full CRUD implementations}';
+    protected $description = 'Create a new module with folder structure and configuration, and generate CRUD operations or empty stub files for an entity. Use --no-implement to generate empty stubs (like Laravel make:* commands).';
 
     public function handle()
     {
         $module = Str::studly($this->argument('module'));
         $entity = Str::studly($this->argument('entity'));
-
-        $data = $this->collectAttributes();
-        $attributes = $data['attributes'];
-        $translatableAttributes = $data['translatableAttributes'];
+        $noImplement = $this->option('no-implement');
 
         $modulePath = base_path("Modules/{$module}");
         $configPath = "{$modulePath}/Config";
@@ -39,6 +36,7 @@ class generateModule extends Command
         $servicesInterfacePath = "{$servicesPath}/Interface";
         $providersPath = "{$modulePath}/Providers";
         $isFirstInstall = !File::exists(base_path('Modules'));
+
         if (!File::exists($modulePath)) {
             File::makeDirectory($modulePath, 0755, true);
             File::makeDirectory($configPath, 0755, true);
@@ -58,35 +56,60 @@ class generateModule extends Command
             $this->createConfigFile($configPath, $module);
             $this->createModuleServiceProvider(base_path('app/Providers'));
             $this->createBaseServiceProvider($providersPath, $module);
-
             $this->createRepositoryServiceProvider($providersPath, $module);
-
             $this->createServiceServiceProvider($providersPath, $module);
             $this->registerProvidersInBootstrap($module);
+
             if ($isFirstInstall) {
                 $this->updateMainDatabaseSeeder();
                 $this->updateBootstrapApp();
+                $this->checkAndCreateApiRoutesFile();
             }
+
             $this->info("Module {$module} created successfully.");
         }
 
-        $this->createMigration($migrationsPath, $entity, $attributes);
-        $this->createModel($modelsPath, $module, $entity, $attributes, $translatableAttributes);
-        $this->createSeeder($seedersPath, $module, $entity, $attributes);
-        $this->createDatabaseSeeder($seedersPath, $module, $entity);
-        $this->createRepositoryInterface($repositoriesInterfacePath, $module, $entity);
-        $this->createRepositoryImplementation($repositoriesImplPath, $module, $entity);
-        $this->createServiceInterface($servicesInterfacePath, $module, $entity);
-        $this->createBaseService($servicesInterfacePath, $module);
-        $this->createServiceImplementation($servicesImplPath, $module, $entity, $attributes, $translatableAttributes);
-        $this->createController($controllersPath, $module, $entity);
-        $this->createStoreRequest($requestsPath, $module, $entity, $attributes);
-        $this->createUpdateRequest($requestsPath, $module, $entity, $attributes);
-        $this->createResource($routesPath, $module, $entity, $attributes);
-        $this->createRoutes($resourcesPath, $module, $entity);
-        $this->updateServiceProvider($providersPath, $module, $entity);
+        if (!$noImplement) {
+            $data = $this->collectAttributes();
+            $attributes = $data['attributes'];
+            $translatableAttributes = $data['translatableAttributes'];
 
-        $this->info("Entity {$entity} created successfully in {$module} module.");
+            $this->createMigration($migrationsPath, $entity, $attributes);
+            $this->createModel($modelsPath, $module, $entity, $attributes, $translatableAttributes);
+            $this->createSeeder($seedersPath, $module, $entity, $attributes);
+            $this->createDatabaseSeeder($seedersPath, $module, $entity);
+            $this->createRepositoryInterface($repositoriesInterfacePath, $module, $entity);
+            $this->createRepositoryImplementation($repositoriesImplPath, $module, $entity);
+            $this->createServiceInterface($servicesInterfacePath, $module, $entity);
+            $this->createBaseService($servicesInterfacePath, $module);
+            $this->createServiceImplementation($servicesImplPath, $module, $entity, $attributes, $translatableAttributes);
+            $this->createController($controllersPath, $module, $entity);
+            $this->createStoreRequest($requestsPath, $module, $entity, $attributes);
+            $this->createUpdateRequest($requestsPath, $module, $entity, $attributes);
+            $this->createResource($routesPath, $module, $entity, $attributes);
+            $this->createRoutes($resourcesPath, $module, $entity);
+            $this->updateServiceProvider($providersPath, $module, $entity);
+
+            $this->info("Entity {$entity} created successfully in {$module} module with full CRUD implementation.");
+        } else {
+            $this->createEmptyMigration($migrationsPath, $entity);
+            $this->createEmptyModel($modelsPath, $module, $entity);
+            $this->createEmptySeeder($seedersPath, $module, $entity);
+            $this->createEmptyDatabaseSeeder($seedersPath, $module, $entity);
+            $this->createEmptyRepositoryInterface($repositoriesInterfacePath, $module, $entity);
+            $this->createEmptyRepositoryImplementation($repositoriesImplPath, $module, $entity);
+            $this->createEmptyServiceInterface($servicesInterfacePath, $module, $entity);
+            $this->createBaseService($servicesInterfacePath, $module);
+            $this->createEmptyServiceImplementation($servicesImplPath, $module, $entity);
+            $this->createEmptyController($controllersPath, $module, $entity);
+            $this->createEmptyStoreRequest($requestsPath, $module, $entity);
+            $this->createEmptyUpdateRequest($requestsPath, $module, $entity);
+            $this->createEmptyResource($routesPath, $module, $entity);
+            $this->createEmptyRoutes($resourcesPath, $module, $entity);
+            $this->updateServiceProvider($providersPath, $module, $entity);
+
+            $this->info("Empty stub files for entity {$entity} created successfully in {$module} module.");
+        }
     }
 
     protected function collectAttributes()
@@ -197,6 +220,20 @@ class generateModule extends Command
             'translatableAttributes' => $translatableAttributes,
         ];
     }
+
+    protected function checkAndCreateApiRoutesFile()
+    {
+        $apiRoutesPath = base_path('routes/api.php');
+        if (!File::exists($apiRoutesPath)) {
+            $content = <<<PHP
+<?php
+
+PHP;
+            File::put($apiRoutesPath, $content);
+            $this->info('Created routes/api.php successfully.');
+        }
+    }
+
     protected function updateMainDatabaseSeeder()
     {
         $seederPath = database_path('seeders/DatabaseSeeder.php');
@@ -231,6 +268,7 @@ PHP;
             $this->info('Main DatabaseSeeder updated successfully.');
         }
     }
+
     protected function updateBootstrapApp()
     {
         $appPath = base_path('bootstrap/app.php');
@@ -357,6 +395,7 @@ return Application::configure(basePath: dirname(__DIR__))
     })
     ->create();
 PHP;
+
         $bootstrapDir = dirname($appPath);
         if (!File::exists($bootstrapDir)) {
             File::makeDirectory($bootstrapDir, 0755, true);
@@ -462,6 +501,35 @@ PHP;
         File::put("{$path}/ModuleServiceProvider.php", $content);
     }
 
+    protected function createEmptyMigration($path, $entity)
+    {
+        $tableName = Str::snake(Str::plural($entity));
+        $migrationName = date('Y_m_d_His') . "_create_{$tableName}_table.php";
+        $content = <<<PHP
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration {
+    public function up(): void
+    {
+        Schema::create('{$tableName}', function (Blueprint \$table) {
+            \$table->id();
+            \$table->timestamps();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('{$tableName}');
+    }
+};
+PHP;
+        File::put("{$path}/{$migrationName}", $content);
+    }
+
     protected function createMigration($path, $entity, $attributes)
     {
         $tableName = Str::snake(Str::plural($entity));
@@ -528,6 +596,26 @@ PHP;
         File::put("{$path}/{$migrationName}", $content);
     }
 
+    protected function createEmptyModel($path, $module, $entity)
+    {
+        $content = <<<PHP
+<?php
+
+namespace Modules\\{$module}\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+
+class {$entity} extends Model
+{
+    use HasFactory;
+
+    protected \$fillable = [];
+}
+PHP;
+        File::put("{$path}/{$entity}.php", $content);
+    }
+
     protected function createModel($path, $module, $entity, $attributes, $translatableAttributes)
     {
         $fillable = '';
@@ -564,6 +652,26 @@ class {$entity} extends Model
 }
 PHP;
         File::put("{$path}/{$entity}.php", $content);
+    }
+
+    protected function createEmptySeeder($path, $module, $entity)
+    {
+        $content = <<<PHP
+<?php
+
+namespace Modules\\{$module}\Database\Seeders;
+
+use Illuminate\Database\Seeder;
+
+class {$entity}Seeder extends Seeder
+{
+    public function run(): void
+    {
+        //
+    }
+}
+PHP;
+        File::put("{$path}/{$entity}Seeder.php", $content);
     }
 
     protected function createSeeder($path, $module, $entity, $attributes)
@@ -643,6 +751,40 @@ PHP;
         }
     }
 
+    protected function createEmptyDatabaseSeeder($path, $module, $entity)
+    {
+        $existingContent = File::exists("{$path}/DatabaseSeeder.php") ? File::get("{$path}/DatabaseSeeder.php") : null;
+        $call = "        \$this->call([{$entity}Seeder::class]);\n";
+
+        if ($existingContent) {
+            $foreignKeyEnd = "        DB::statement('SET FOREIGN_KEY_CHECKS=1;');";
+            if (str_contains($existingContent, $foreignKeyEnd)) {
+                $content = str_replace($foreignKeyEnd, $call . $foreignKeyEnd, $existingContent);
+            } else {
+                $content = str_replace('    }', $call . '    }', $existingContent);
+            }
+        } else {
+            $content = <<<PHP
+<?php
+
+namespace Modules\\{$module}\Database\Seeders;
+
+use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\DB;
+
+class DatabaseSeeder extends Seeder
+{
+    public function run(): void
+    {
+        DB::statement('SET FOREIGN_KEY_CHECKS=0;');
+{$call}        DB::statement('SET FOREIGN_KEY_CHECKS=1;');
+    }
+}
+PHP;
+        }
+        File::put("{$path}/DatabaseSeeder.php", $content);
+    }
+
     protected function createDatabaseSeeder($path, $module, $entity)
     {
         $existingContent = File::exists("{$path}/DatabaseSeeder.php") ? File::get("{$path}/DatabaseSeeder.php") : null;
@@ -677,6 +819,21 @@ PHP;
         File::put("{$path}/DatabaseSeeder.php", $content);
     }
 
+    protected function createEmptyRepositoryInterface($path, $module, $entity)
+    {
+        $content = <<<PHP
+<?php
+
+namespace Modules\\{$module}\Repositories\Interface;
+
+interface {$entity}Repository
+{
+    //
+}
+PHP;
+        File::put("{$path}/{$entity}Repository.php", $content);
+    }
+
     protected function createRepositoryInterface($path, $module, $entity)
     {
         $content = <<<PHP
@@ -698,6 +855,23 @@ interface {$entity}Repository
 }
 PHP;
         File::put("{$path}/{$entity}Repository.php", $content);
+    }
+
+    protected function createEmptyRepositoryImplementation($path, $module, $entity)
+    {
+        $content = <<<PHP
+<?php
+
+namespace Modules\\{$module}\Repositories\Implementation;
+
+use Modules\\{$module}\Repositories\Interface\\{$entity}Repository;
+
+class {$entity}RepositoriesImpl implements {$entity}Repository
+{
+    //
+}
+PHP;
+        File::put("{$path}/{$entity}RepositoriesImpl.php", $content);
     }
 
     protected function createRepositoryImplementation($path, $module, $entity)
@@ -742,6 +916,21 @@ class {$entity}RepositoriesImpl implements {$entity}Repository
 }
 PHP;
         File::put("{$path}/{$entity}RepositoriesImpl.php", $content);
+    }
+
+    protected function createEmptyServiceInterface($path, $module, $entity)
+    {
+        $content = <<<PHP
+<?php
+
+namespace Modules\\{$module}\Services\Interface;
+
+interface {$entity}Service
+{
+    //
+}
+PHP;
+        File::put("{$path}/{$entity}Service.php", $content);
     }
 
     protected function createServiceInterface($path, $module, $entity)
@@ -792,6 +981,25 @@ class BaseService
 }
 PHP;
         File::put("{$path}/BaseService.php", $content);
+    }
+
+    protected function createEmptyServiceImplementation($path, $module, $entity)
+    {
+        $entityLower = Str::camel($entity);
+        $content = <<<PHP
+<?php
+
+namespace Modules\\{$module}\Services\Implementation;
+
+use Modules\\{$module}\Services\Interface\\{$entity}Service;
+use Modules\\{$module}\Services\Interface\BaseService;
+
+class {$entity}ServiceImpl extends BaseService implements {$entity}Service
+{
+    //
+}
+PHP;
+        File::put("{$path}/{$entity}ServiceImpl.php", $content);
     }
 
     protected function createServiceImplementation($path, $module, $entity, $attributes, $translatableAttributes)
@@ -882,7 +1090,6 @@ class {$entity}ServiceImpl extends BaseService implements {$entity}Service
 
             \${$entityLower} = \$this->{$entityLower}Repository->store(\${$entityLower});
             
-            
             return \$this->returnData(
                 __('messages.{$entityLower}_create_success'),
                 Response::HTTP_CREATED,
@@ -903,7 +1110,7 @@ class {$entity}ServiceImpl extends BaseService implements {$entity}Service
             Log::info('{$entity} update request', ['data' => \$request->all()]);
             
     {$updateAssignments}            
-            
+    
             \${$entityLower} = \$this->{$entityLower}Repository->update(\${$entityLower});
     
             Log::info('{$entity} updated successfully', ['id' => \${$entityLower}->id]);
@@ -944,6 +1151,23 @@ class {$entity}ServiceImpl extends BaseService implements {$entity}Service
 }
 PHP;
         File::put("{$path}/{$entity}ServiceImpl.php", $content);
+    }
+
+    protected function createEmptyController($path, $module, $entity)
+    {
+        $content = <<<PHP
+<?php
+
+namespace Modules\\{$module}\Http\Controllers;
+
+use App\Http\Controllers\Controller;
+
+class {$entity}Controller extends Controller
+{
+    //
+}
+PHP;
+        File::put("{$path}/{$entity}Controller.php", $content);
     }
 
     protected function createController($path, $module, $entity)
@@ -1002,6 +1226,31 @@ PHP;
         File::put("{$path}/{$entity}Controller.php", $content);
     }
 
+    protected function createEmptyStoreRequest($path, $module, $entity)
+    {
+        $content = <<<PHP
+<?php
+
+namespace Modules\\{$module}\Http\Requests;
+
+use Illuminate\Foundation\Http\FormRequest;
+
+class Store{$entity}Request extends FormRequest
+{
+    public function authorize(): bool
+    {
+        return true;
+    }
+
+    public function rules(): array
+    {
+        return [];
+    }
+}
+PHP;
+        File::put("{$path}/Store{$entity}Request.php", $content);
+    }
+
     protected function createStoreRequest($path, $module, $entity, $attributes)
     {
         $rules = '';
@@ -1034,6 +1283,31 @@ class Store{$entity}Request extends FormRequest
 }
 PHP;
         File::put("{$path}/Store{$entity}Request.php", $content);
+    }
+
+    protected function createEmptyUpdateRequest($path, $module, $entity)
+    {
+        $content = <<<PHP
+<?php
+
+namespace Modules\\{$module}\Http\Requests;
+
+use Illuminate\Foundation\Http\FormRequest;
+
+class Update{$entity}Request extends FormRequest
+{
+    public function authorize(): bool
+    {
+        return true;
+    }
+
+    public function rules(): array
+    {
+        return [];
+    }
+}
+PHP;
+        File::put("{$path}/Update{$entity}Request.php", $content);
     }
 
     protected function createUpdateRequest($path, $module, $entity, $attributes)
@@ -1144,6 +1418,27 @@ PHP;
         return implode('|', $rules);
     }
 
+    protected function createEmptyResource($path, $module, $entity)
+    {
+        $content = <<<PHP
+<?php
+
+namespace Modules\\{$module}\Http\Resources;
+
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\JsonResource;
+
+class {$entity}Resource extends JsonResource
+{
+    public function toArray(Request \$request): array
+    {
+        return [];
+    }
+}
+PHP;
+        File::put("{$path}/{$entity}Resource.php", $content);
+    }
+
     protected function createResource($path, $module, $entity, $attributes)
     {
         $fields = '';
@@ -1171,6 +1466,22 @@ class {$entity}Resource extends JsonResource
 }
 PHP;
         File::put("{$path}/{$entity}Resource.php", $content);
+    }
+
+    protected function createEmptyRoutes($path, $module, $entity)
+    {
+        $entityLower = Str::camel($entity);
+        $content = <<<PHP
+<?php
+
+use Illuminate\Support\Facades\Route;
+use Modules\\{$module}\Http\Controllers\\{$entity}Controller;
+
+Route::middleware(['cors', 'lang', 'throttle'])->prefix('v1/')->group(function () {
+    //
+});
+PHP;
+        File::put("{$path}/{$entityLower}.php", $content);
     }
 
     protected function createRoutes($path, $module, $entity)
@@ -1222,7 +1533,6 @@ class {$module}ServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-
     }
 }
 PHP;
